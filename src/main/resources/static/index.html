@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commerce AI Assistant</title>
+    <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+            <h1>Commerce AI Assistant</h1>
+            <button id="clearBtn" class="btn-secondary" type="button">Clear chat</button>
+        </header>
+
+        <div class="tabs" role="tablist">
+            <button class="tab active" role="tab" data-tab="general" aria-selected="true">
+                General
+            </button>
+            <button class="tab" role="tab" data-tab="product" aria-selected="false">
+                Product
+            </button>
+        </div>
+
+        <!-- General question tab (default) -->
+        <section class="tab-panel active" data-panel="general" role="tabpanel">
+            <main id="chat-general" class="chat" aria-live="polite">
+                <div class="message message-system">
+                    Ask a general question below to get started.
+                </div>
+            </main>
+            <div id="error-general" class="error-banner" hidden></div>
+            <form id="form-general" class="chat-input" autocomplete="off" data-endpoint="/api/ai/ask">
+                <textarea
+                    id="input-general"
+                    class="chat-textarea"
+                    placeholder="Ask a general question. Press Enter to send, Shift+Enter for a new line."
+                    rows="2"
+                    required
+                ></textarea>
+                <button type="submit" class="btn-primary">Send</button>
+            </form>
+        </section>
+
+        <!-- Product-specific question tab -->
+        <section class="tab-panel" data-panel="product" role="tabpanel" hidden>
+            <main id="chat-product" class="chat" aria-live="polite">
+                <div class="message message-system">
+                    Ask a product-specific question below.
+                </div>
+            </main>
+            <div id="error-product" class="error-banner" hidden></div>
+            <form id="form-product" class="chat-input" autocomplete="off" data-endpoint="/api/ai/product">
+                <textarea
+                    id="input-product"
+                    class="chat-textarea"
+                    placeholder="Ask about a product. Press Enter to send, Shift+Enter for a new line."
+                    rows="2"
+                    required
+                ></textarea>
+                <button type="submit" class="btn-primary">Send</button>
+            </form>
+        </section>
+    </div>
+
+    <script src="/js/chat.js"></script>
+</body>
+</html>
