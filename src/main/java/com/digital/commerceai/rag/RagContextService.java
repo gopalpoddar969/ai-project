@@ -16,4 +16,11 @@ public class RagContextService {
                 .map(Document::getText)
                 .reduce("", (a, b) -> a + "\n\n" + b);
     }
+
+    public String buildContext(String text) {
+        if (text == null || text.isBlank()) {
+            return "No relevant business information was found.";
+        }
+        return text;
+    }
 }

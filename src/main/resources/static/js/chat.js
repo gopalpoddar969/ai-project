@@ -1,20 +1,16 @@
-// Simple two-tab chat UI for the Commerce AI Assistant.
-// Talks to the existing Spring Boot endpoints:
-//   GET /api/ai/ask?question=...      (General tab)
-//   GET /api/ai/product?question=...  (Product tab)
-
-// One config entry per tab. Same logic; just a different endpoint.
 const TABS = [
     { name: 'general', endpoint: '/api/ai/ask' },
-    { name: 'product', endpoint: '/api/ai/rag' }
+    { name: 'product', endpoint: '/api/ai/semantic-search' }
 ];
 
-// Keeps track of which tab the user is currently viewing.
 let activeTab = 'general';
 
-// Escape HTML so untrusted text (like the AI response) can't inject markup.
 function escapeHtml(str) {
-    return str
+    if (str === null || str === undefined) {
+        return '';
+    }
+
+    return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -22,28 +18,133 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-// Very small markdown -> HTML pass. Handles the formatting the AI actually emits:
-//   **bold**            -> <strong>bold</strong>
-//   `inline code`       -> <code>inline code</code>
-// Everything else stays as escaped plain text. `white-space: pre-wrap`
-// in the CSS already preserves the AI's line breaks and indentation.
 function renderMarkdown(text) {
+    if (text === null || text === undefined) {
+        return '';
+    }
+
     let html = escapeHtml(text);
+    const codeBlocks = [];
+
+    html = html.replace(/`([^`]+)`/g, function (match, code) {
+        const index = codeBlocks.length;
+        codeBlocks.push('<code>' + code + '</code>');
+        return '___CODE_BLOCK_' + index + '___';
+    });
+
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    const lines = html.split('\n');
+    let result = [];
+    let tableRows = [];
+    let insideTable = false;
+
+    function isTableRow(line) {
+        const trimmed = line.trim();
+        return trimmed.startsWith('|') && trimmed.endsWith('|');
+    }
+
+    function isTableSeparator(line) {
+        const trimmed = line.trim();
+
+        if (!isTableRow(trimmed)) {
+            return false;
+        }
+
+        const cells = trimmed.slice(1, -1).split('|').map(cell => cell.trim());
+        return cells.length > 0 && cells.every(cell => /^:?-+:?$/.test(cell));
+    }
+
+    function parseTableRow(line) {
+        return line.trim().slice(1, -1).split('|').map(cell => cell.trim());
+    }
+
+    function flushTable() {
+        if (!insideTable || tableRows.length === 0) {
+            return;
+        }
+
+        let tableHtml = '<table class="ai-table">';
+        const header = tableRows[0];
+
+        tableHtml += '<thead><tr>';
+
+        header.forEach(cell => {
+            tableHtml += '<th>' + cell + '</th>';
+        });
+
+        tableHtml += '</tr></thead>';
+
+        if (tableRows.length > 1) {
+            tableHtml += '<tbody>';
+
+            for (let i = 1; i < tableRows.length; i++) {
+                tableHtml += '<tr>';
+
+                tableRows[i].forEach(cell => {
+                    tableHtml += '<td>' + cell + '</td>';
+                });
+
+                tableHtml += '</tr>';
+            }
+
+            tableHtml += '</tbody>';
+        }
+
+        tableHtml += '</table>';
+        result.push(tableHtml);
+
+        tableRows = [];
+        insideTable = false;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (isTableRow(line)) {
+            if (isTableSeparator(line)) {
+                insideTable = true;
+                continue;
+            }
+
+            if (!insideTable) {
+                insideTable = true;
+            }
+
+            tableRows.push(parseTableRow(line));
+            continue;
+        }
+
+        flushTable();
+
+        if (line.trim() === '') {
+            result.push('<br>');
+        } else {
+            result.push(line + '<br>');
+        }
+    }
+
+    flushTable();
+
+    html = result.join('');
+
+    codeBlocks.forEach((codeHtml, index) => {
+        html = html.replace('___CODE_BLOCK_' + index + '___', codeHtml);
+    });
+
     return html;
 }
 
 function appendMessage(chatEl, role, text) {
     const div = document.createElement('div');
-    div.className = 'message message-' + role; // user | ai | system
+    div.className = 'message message-' + role;
+
     if (role === 'ai') {
-        // Only the AI's replies are rendered as (very simple) markdown.
-        // User/system text stays as plain text.
         div.innerHTML = renderMarkdown(text);
     } else {
         div.textContent = text;
     }
+
     chatEl.appendChild(div);
     chatEl.scrollTop = chatEl.scrollHeight;
 }
@@ -53,13 +154,17 @@ function showTypingIndicator(chatEl, tabName) {
     el.className = 'typing';
     el.id = 'typing-' + tabName;
     el.innerHTML = '<span></span><span></span><span></span>';
+
     chatEl.appendChild(el);
     chatEl.scrollTop = chatEl.scrollHeight;
 }
 
 function removeTypingIndicator(tabName) {
     const el = document.getElementById('typing-' + tabName);
-    if (el) el.remove();
+
+    if (el) {
+        el.remove();
+    }
 }
 
 function showError(errorEl, message) {
@@ -74,26 +179,54 @@ function clearError(errorEl) {
 
 async function askApi(endpoint, question) {
     const url = endpoint + '?question=' + encodeURIComponent(question);
-    const response = await fetch(url, { method: 'GET' });
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json, text/plain, */*'
+        }
+    });
+
     if (!response.ok) {
         throw new Error('Request failed with status ' + response.status);
     }
-    // The backend returns a plain String.
-    return await response.text();
+
+    const contentType = response.headers.get('content-type') || '';
+    const responseText = await response.text();
+
+    if (contentType.includes('application/json')) {
+        try {
+            const json = JSON.parse(responseText);
+
+            if (json && typeof json === 'object' && Object.prototype.hasOwnProperty.call(json, 'answer')) {
+                return json.answer || 'No answer was returned.';
+            }
+
+            return responseText;
+        } catch (error) {
+            console.warn('Response was marked as JSON but could not be parsed.', error);
+            return responseText;
+        }
+    }
+
+    return responseText;
 }
 
-// Wire up a single tab (chat area + form + error banner) to its endpoint.
 function setupTab(tab) {
-    const chatEl   = document.getElementById('chat-'  + tab.name);
-    const formEl   = document.getElementById('form-'  + tab.name);
-    const inputEl  = document.getElementById('input-' + tab.name);
-    const errorEl  = document.getElementById('error-' + tab.name);
-    const sendBtn  = formEl.querySelector('button[type="submit"]');
+    const chatEl = document.getElementById('chat-' + tab.name);
+    const formEl = document.getElementById('form-' + tab.name);
+    const inputEl = document.getElementById('input-' + tab.name);
+    const errorEl = document.getElementById('error-' + tab.name);
+    const sendBtn = formEl.querySelector('button[type="submit"]');
 
     async function handleSubmit(event) {
         event.preventDefault();
+
         const question = inputEl.value.trim();
-        if (!question) return;
+
+        if (!question) {
+            return;
+        }
 
         clearError(errorEl);
         appendMessage(chatEl, 'user', question);
@@ -118,7 +251,6 @@ function setupTab(tab) {
     }
 
     function handleKeyDown(event) {
-        // Enter submits; Shift+Enter adds a newline.
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             formEl.requestSubmit();
@@ -129,12 +261,12 @@ function setupTab(tab) {
     inputEl.addEventListener('keydown', handleKeyDown);
 }
 
-// Switches which tab is visible.
 function switchTab(tabName) {
     activeTab = tabName;
 
     document.querySelectorAll('.tab').forEach(btn => {
         const isActive = btn.dataset.tab === tabName;
+
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
@@ -144,25 +276,28 @@ function switchTab(tabName) {
     });
 
     const activeInput = document.getElementById('input-' + tabName);
-    if (activeInput) activeInput.focus();
+
+    if (activeInput) {
+        activeInput.focus();
+    }
 }
 
-// Clears only the active tab's chat and error state.
 function clearActiveTab() {
-    const chatEl  = document.getElementById('chat-'  + activeTab);
+    const chatEl = document.getElementById('chat-' + activeTab);
     const errorEl = document.getElementById('error-' + activeTab);
     const inputEl = document.getElementById('input-' + activeTab);
 
     chatEl.innerHTML = '';
-    const msg = activeTab === 'general'
+
+    const message = activeTab === 'general'
         ? 'Chat cleared. Ask a new general question below.'
         : 'Chat cleared. Ask a new product question below.';
-    appendMessage(chatEl, 'system', msg);
+
+    appendMessage(chatEl, 'system', message);
     clearError(errorEl);
     inputEl.focus();
 }
 
-// --- Initialisation ---
 TABS.forEach(setupTab);
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -172,5 +307,9 @@ document.querySelectorAll('.tab').forEach(btn => {
 document.getElementById('clearBtn').addEventListener('click', clearActiveTab);
 
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('input-general').focus();
+    const input = document.getElementById('input-general');
+
+    if (input) {
+        input.focus();
+    }
 });

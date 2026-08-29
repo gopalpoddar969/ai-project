@@ -295,264 +295,298 @@ Added system instructions alongside the user's question.
 The application now uses system instructions together with user messages to control the behavior of the AI assistant.
 
 
-18. BASIC RAG IMPLEMENTATION
-=====================================
-Implemented a basic file-based RAG workflow.
+18. BASIC RAG DEMONSTRATION
+===========================
 
-New files:
+A small fixed-text RAG implementation is retained as a simple
+learning demonstration.
 
-src/main/resources/knowledge/products.txt
-- Mock product catalog/specification information used as knowledge source.
+This implementation is intentionally separate from the
+semantic product-search implementation.
 
-src/main/resources/knowledge/inventory.txt
-- Mock product inventory/warehouse information used as knowledge source.
+The /api/ai/rag endpoint demonstrates the basic RAG concept:
 
-src/main/resources/knowledge/pricing.txt
-- Mock product pricing information used as knowledge source.
+    User Question
+        ->
+    Fixed Demo Knowledge
+        ->
+    Retrieved Context
+        ->
+    RAG System Instructions
+        ->
+    Claude
+        ->
+    Final Answer
 
-src/main/resources/knowledge/delivery.txt
-- Mock product delivery information used as knowledge source.
+RagService.java
+    - Provides RAG-specific system instructions.
+    - Provides a small fixed demo knowledge text through
+      getDemoKnowledge().
+    - The demo knowledge is not stored in Redis.
+    - The demo knowledge is not part of semantic product search.
 
-src/main/resources/knowledge/policies.txt
-- Mock B2B policy information used as knowledge source.
-
-src/main/java/com/digital/commerceai/rag/KnowledgeDocument.java
-- Represents an individual knowledge document.
-
-src/main/java/com/digital/commerceai/rag/KnowledgeRepository.java
-- Loads knowledge files from the classpath.
-- Performs basic keyword-based retrieval of relevant documents.
-
-src/main/java/com/digital/commerceai/rag/RagService.java
-- Provides RAG system instructions.
-- Retrieves relevant knowledge context through KnowledgeRepository.
-
-Updated:
+RagContextService.java
+    - Builds the context supplied to the LLM.
 
 AiService.java
-- ragQuery() now retrieves relevant knowledge context before calling Claude.
-- Retrieved context is included together with the user question in the AI prompt.
+    - ragQuery() obtains the demo knowledge.
+    - Builds the RAG context.
+    - Sends context + user question to Claude.
 
 AiController.java
-- Added /api/ai/rag endpoint for RAG-based questions.
+    - Provides /api/ai/rag.
 
-Basic RAG flow:
+This fixed-text implementation exists only as a simple
+RAG learning example.
 
-User Question
-    -> KnowledgeRepository
-    -> Relevant Knowledge
-    -> Retrieved Context
-    -> Claude
-    -> Final Answer
-
-Validation commands:
-
-.\mvnw.cmd clean test
-
-.\mvnw.cmd spring-boot:run
-
-19. BROWSER-BASED AI CHAT CLIENT UI
-============================================
-Added a basic browser-based chat interface for interacting with the AI REST APIs.
-
-New files:
-
-src/main/resources/static/index.html
-- Provides the browser-based chat interface.
-- Includes two chat tabs:
-  1. General
-  2. Product
-- General tab invokes the /api/ai/ask endpoint.
-- Product tab invokes the /api/ai/rag endpoint.
-
-src/main/resources/static/css/style.css
-- Provides styling and layout for the browser-based AI chat interface.
-
-src/main/resources/static/js/chat.js
-- Handles user interaction and chat messages.
-- Invokes the corresponding backend REST API based on the selected tab.
-- Displays the AI response in the browser.
-
-The application can now be accessed through the browser using:
-
-http://localhost:18080/
-
-The UI provides a simple chat-client experience over the existing Spring Boot REST APIs.
-
-20. RAG RETRIEVAL ARCHITECTURE
-=======================================
-
-Implemented a basic retrieval-oriented RAG architecture.
-
-New/updated files:
-
-- rag/KnowledgeDocument.java
-  - Represents business knowledge with ID, title, category and content.
-
-- rag/KnowledgeRepository.java
-  - Stores demo business knowledge and provides basic question-based retrieval.
-
-- rag/RagService.java
-  - Coordinates knowledge retrieval and retrieved-context construction.
-  - Provides RAG-specific system instructions.
-
-- service/AiService.java
-  - Updated ragQuery() to retrieve relevant knowledge, build context and send
-    context + user question to Claude through ChatClient.
-
-- resources/knowledge/
-  - Added demo knowledge files for products, inventory, pricing and orders.
-
-RAG flow introduced:
-
-User Question -> Knowledge Retrieval -> Context Construction -> ChatClient/Claude -> Answer
-
-This mplementation uses basic keyword-based retrieval as a learning step.
-Vector/semantic retrieval and embeddings will be introduced in subsequent hands-on work.
-
-Commands executed:
-
-.\mvnw.cmd clean test
-.\mvnw.cmd spring-boot:run
+No KnowledgeRepository or classpath knowledge files are used.
 
 
-21. RAG SEMANTIC SEARCH WITH LOCAL OLLAMA + REDIS
-============================================================
-The RAG (Retrieval-Augmented Generation) implementation
-using a fully local embedding approach.
+19. SEMANTIC PRODUCT SEARCH
+===========================
 
-The implementation was changed from cloud-based/OpenAI embeddings to a
-locally running Ollama embedding model, allowing semantic search to work
-without consuming any OpenAI embedding API quota.
+The main RAG implementation uses semantic vector search
+against real product information retrieved from HCL Commerce Solr.
 
-This implementation contains the following major areas:
+The semantic product-search flow is:
 
-1. Local Ollama Embedding
-   - Ollama is installed and running locally on the Windows machine.
-   - A local embedding model is used to generate vector embeddings.
-   - Spring AI automatically uses the configured EmbeddingModel internally
-     during document ingestion and similarity search.
-   - No explicit EmbeddingModel object is required in the application
-     business code.
+    HCL Commerce Solr
+        ->
+    KnowledgeIngestionService
+        ->
+    Product Document Text
+        ->
+    Ollama Embedding Model
+        ->
+    Vector Embedding
+        ->
+    Redis Vector Store
+        ->
+    Semantic Similarity Search
+        ->
+    Relevant Product Documents
+        ->
+    RAG Context
+        ->
+    Claude
+        ->
+    Final Conversational Answer
 
-2. Redis Vector Store
-   - Memurai for Redis is used as the local Redis-compatible server.
-   - Redis stores the generated document embeddings and associated document
-     information.
-   - Spring AI Redis Vector Store is used for semantic similarity search.
-   - Docker is not required for the local setup.
+KnowledgeIngestionService.java
+    - Retrieves product information from Solr.
+    - Converts each Solr product into a Spring AI Document.
+    - Stores important product fields directly inside the
+      document text.
+    - The document text includes fields such as:
 
-3. Knowledge Ingestion
-   - Business knowledge documents are created by
-     KnowledgeIngestionService.
-   - During application startup, the documents are converted into embeddings
-     through the configured local Ollama embedding model.
-   - The resulting vectors are stored in Redis.
+        Catentry ID
+        Product name
+        Part number
+        Manufacturer
+        Manufacturer part number
+        Short description
+        Long description
+        Product attributes
+        Quantity multiple
+        Quantity measure
+        Weight
+        Weight measure
 
-4. Semantic Retrieval
-   - RagRetrievalService receives the user's question.
-   - The question is converted into an embedding automatically.
-   - Redis Vector Store performs similarity search against the stored
-     document embeddings.
-   - The most relevant documents are returned based on semantic similarity.
+    - The document is converted into an embedding through
+      the configured local Ollama embedding model.
+    - The resulting vector and document information are
+      stored in Redis.
 
-5. RAG Context Construction
-   - RagContextService converts the retrieved documents into a context
-     that can be supplied to the LLM.
-   - Only retrieved business information is provided as RAG context.
+RagRetrievalService.java
+    - Performs semantic similarity search against Redis.
+    - Converts the user question into an embedding automatically
+      through Spring AI.
+    - Retrieves the most semantically relevant product documents.
+    - Removes duplicate product results.
+    - Extracts Catentry ID and Part Number directly from the
+      document text.
 
-6. RAG Response Generation
-   - RagService defines the RAG-specific system instructions.
-   - AiService combines:
-       User Question
-       + Retrieved Context
-       + RAG System Instructions
-       and sends them to the configured chat model.
-   - The LLM generates the final answer using the retrieved business
-     information.
+RagContextService.java
+    - Converts retrieved product documents into the context
+      supplied to the LLM.
 
-7. REST API
-   - The existing AiController was enhanced with the RAG endpoint.
-   - No separate controller was introduced for the RAG implementation.
+RagService.java
+    - Provides RAG system instructions.
+    - Ensures the LLM uses retrieved information as the
+      source of truth.
+    - Prevents unsupported product information from being
+      invented.
 
-8. Files / Components Updated
+AiService.java
+    - semanticSearch() coordinates semantic retrieval,
+      product extraction, context construction and LLM response.
 
-   AiController.java
-   - Added/uses the RAG REST endpoint.
+AiController.java
+    - Provides /api/ai/semantic-search.
 
-   AiService.java
-   - Added the RAG processing flow.
-   - Coordinates retrieval, context construction and LLM response generation.
+Example:
 
-   KnowledgeIngestionService.java
-   - Added business knowledge ingestion into the Redis Vector Store.
+    GET /api/ai/semantic-search?question=nanoshaft inserts
 
-   RagRetrievalService.java
-   - Performs semantic similarity search using Redis Vector Store.
 
-   RagContextService.java
-   - Builds the retrieved business context.
+20. DOCUMENT DATA AND VECTOR STORE
+==================================
 
-   RagService.java
-   - Contains RAG system instructions and RAG-related processing.
+Product data used for semantic search is no longer maintained
+through hardcoded knowledge files.
 
-   pom.xml
-   - Added the Spring AI Redis Vector Store dependency.
-   - Configured the required local AI/embedding dependencies.
+The application retrieves product information directly from
+HCL Commerce Solr during knowledge ingestion.
 
-   application.properties
-   - Added Redis configuration.
-   - Added Spring AI Redis Vector Store configuration.
-   - Configured the local Redis/Memurai connection.
-   - Configured the required vector-store properties.
+The resulting product information is stored as Spring AI
+Document text together with its generated vector representation.
 
-9. Validation
+Important product identifiers such as Catentry ID and Part Number
+are intentionally included inside the document text because the
+application uses the retrieved document content as the source
+for product information.
 
-   The final implementation was successfully validated using multiple
-   scenarios:
+Example document:
 
-   - Known product information.
-   - Product inventory information.
-   - Product pricing information.
-   - Semantic variations of known questions.
-   - Questions where relevant business information exists.
-   - Completely unknown questions where the RAG knowledge base does not
-     contain the requested information.
+    Catentry ID: 6069003
+    Product name: NS05B495-152-052005L
+    Part number: 03236192
+    Manufacturer: NS05B495-152-052005L,CP520
+    Manufacturer part number: 58113
+    Short description: A62 Nanoshaft and X2 inserts;...
+    Long description: ...
+    Product attributes: ...
+    Quantity multiple: 1.0
+    Quantity measure: C62
+    Weight: 0.0
+    Weight measure: KGM
 
-   The RAG implementation successfully retrieves relevant information for
-   supported questions and does not fabricate business information when
-   the required information is unavailable.
+No products.txt, inventory.txt, pricing.txt, delivery.txt,
+policies.txt or KnowledgeRepository is required for the
+current semantic-search architecture.
 
-10. Architecture Concept
 
-    The completed implementation demonstrates the complete basic RAG
-    lifecycle:
+21. LOCAL OLLAMA + REDIS VECTOR RAG ARCHITECTURE
+================================================
 
-    Business Documents
-        -> Local Ollama Embedding Model
-        -> Vector Embeddings
-        -> Redis Vector Store
-        -> Semantic Similarity Search
-        -> Retrieved Documents
-        -> RAG Context
-        -> Chat Model
-        -> Final Answer
+The application uses a fully local embedding environment.
 
-    The important learning here is that the application code does
-    not need to manually create or invoke EmbeddingModel for normal RAG
-    processing. Spring AI coordinates the embedding generation internally
-    through its configured EmbeddingModel implementation.
+Ollama
+    - Generates embeddings locally.
+    - The current embedding model is nomic-embed-text.
+    - No external embedding API is required.
 
-11. Local/Free Development Objective
+Redis / Memurai
+    - Provides local Redis-compatible vector storage.
+    - Stores document vectors and document content.
+    - Spring AI Redis Vector Store is used for similarity search.
 
-    It stablishes a locally executable RAG environment without
-    requiring OpenAI embedding API usage.
+Spring AI
+    - Automatically coordinates embedding generation.
+    - Converts product documents into embeddings during ingestion.
+    - Converts user questions into embeddings during retrieval.
+    - Performs semantic similarity search through the configured
+      VectorStore.
 
-    Ollama provides the local embedding capability and Memurai provides the
-    local Redis-compatible vector storage required for the hands-on
-    implementation.
+The application does not manually create or invoke EmbeddingModel
+for normal RAG processing.
 
-    This setup is intended for local learning and development. Production
-    deployments can later replace the local embedding model and Redis
-    infrastructure with enterprise-managed AI and vector infrastructure
-    without fundamentally changing the RAG concepts learned here.
+The completed semantic RAG lifecycle is:
+
+    HCL Commerce Solr
+        ->
+    Product Documents
+        ->
+    Ollama Embedding Model
+        ->
+    Vector Embeddings
+        ->
+    Redis Vector Store
+        ->
+    Semantic Similarity Search
+        ->
+    Retrieved Product Documents
+        ->
+    RAG Context
+        ->
+    Claude Chat Model
+        ->
+    Final Answer
+
+
+22. CURRENT RAG ENDPOINTS
+=========================
+
+Basic RAG demonstration:
+
+    /api/ai/rag
+
+    Uses fixed demo business knowledge.
+
+Semantic product search:
+
+    /api/ai/semantic-search
+
+    Uses real product data from Solr,
+    Ollama embeddings and Redis Vector Store.
+
+General AI question:
+
+    /api/ai/ask
+
+    Sends the question directly to Claude.
+
+Product AI question:
+
+    /api/ai/product
+
+    Sends the question to Claude using the
+    product-specific system instructions.
+
+
+23. CURRENT COMPONENT ARCHITECTURE
+==================================
+
+AiController.java
+    ->
+    HTTP/API layer
+
+AiService.java
+    ->
+    AI orchestration layer
+
+AiPromptService.java
+    ->
+    General/product prompt configuration
+
+RagService.java
+    ->
+    RAG instructions + demo knowledge
+
+RagRetrievalService.java
+    ->
+    Semantic vector retrieval
+
+RagContextService.java
+    ->
+    Retrieved context construction
+
+KnowledgeIngestionService.java
+    ->
+    Solr -> Document -> Embedding -> Redis ingestion
+
+Ollama
+    ->
+    Local embedding generation
+
+Redis / Memurai
+    ->
+    Vector storage and similarity search
+
+Solr
+    ->
+    Product source system
+
+Claude
+    ->
+    Final response generation
