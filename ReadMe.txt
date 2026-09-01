@@ -590,3 +590,166 @@ Solr
 Claude
     ->
     Final response generation
+
+
+24. CONVERSATIONAL AI WITH REDIS-BASED MEMORY
+==============================================
+
+Implemented conversational AI support using Redis-backed
+conversation memory.
+
+The application can now maintain previous messages belonging to
+the same conversation and provide the previous conversation
+context when processing a new user message.
+
+The conversation identifier is generated and managed by the
+application rather than requiring the user to manually create
+or pass a conversation ID.
+
+Key Points:
+
+- Conversation memory is different from RAG/vector memory.
+- RAG retrieves business knowledge based on semantic similarity.
+- Conversational memory stores previous user/assistant messages.
+- Redis can be used to persist conversation history.
+- Conversation identity can be generated and managed internally by
+  the application.
+- The client should not need to manually construct conversation IDs
+  for normal conversational interaction.
+- The conversation history can be retrieved and supplied to the
+  chat model so that follow-up questions can use previous context.
+
+Conceptual distinction:
+
+RAG:
+
+User Question
+    ->
+Embedding
+    ->
+Vector Search
+    ->
+Relevant Business Documents
+    ->
+LLM
+    ->
+Answer
+
+
+Conversational Memory:
+
+User Question
+    ->
+Conversation Identity
+    ->
+Redis Chat History
+    ->
+Previous Messages + Current Message
+    ->
+LLM
+    ->
+Answer
+
+
+Important:
+
+Redis Vector Store and Redis Chat Memory represent two different
+logical responsibilities even though both use Redis infrastructure.
+
+Redis Vector Store:
+    -> semantic product/business knowledge
+    -> embeddings
+    -> similarity search
+
+Redis Chat Memory:
+    -> user/assistant conversation history
+    -> conversation context
+    -> follow-up question support
+
+
+Validation:
+
+- Started Memurai Redis locally.
+- Started Ollama locally.
+- Started Spring Boot application.
+- Sent multiple messages belonging to the same conversation.
+- Verified that follow-up questions can use previous conversation
+  context.
+- Verified Redis-backed conversation persistence.
+
+The conversational implementation provides the foundation for
+future multi-turn AI assistants and agentic workflows.
+
+
+25. SWAGGER / OPENAPI API DOCUMENTATION
+=======================================
+
+Added Swagger/OpenAPI documentation to the Spring Boot application.
+
+Swagger provides an interactive API documentation and testing
+interface for the application's REST APIs.
+
+Technology:
+
+    Springdoc OpenAPI
+        ->
+    OpenAPI specification
+        ->
+    Swagger UI
+
+
+New configuration:
+
+    src/main/java/com/digital/commerceai/config/OpenApiConfig.java
+
+The OpenAPI configuration provides:
+
+- API title
+- API version
+- API description
+- API grouping/documentation information
+
+
+Updated:
+
+    pom.xml
+
+Added Springdoc OpenAPI WebMVC UI dependency.
+
+
+Updated:
+
+    application.properties
+
+Added:
+
+    springdoc.api-docs.path=/v3/api-docs
+    springdoc.swagger-ui.path=/swagger-ui.html
+
+
+Controller documentation was enhanced using OpenAPI annotations
+such as:
+
+    @Tag
+    @Operation
+    @Parameter
+
+
+The existing AI APIs can now be explored and tested through Swagger:
+
+    /api/ai/ask
+    /api/ai/product
+    /api/ai/rag
+    /api/ai/semantic-search
+
+The conversational API is also documented through Swagger.
+
+
+Swagger UI:
+
+    http://localhost:18080/swagger-ui.html
+
+
+OpenAPI specification:
+
+    http://localhost:18080/v3/api-docs

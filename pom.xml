@@ -31,6 +31,7 @@
 	</properties>
 	<dependencyManagement>
 		<dependencies>
+			<!-- Manages compatible versions of Spring AI dependencies used by the application. -->
 			<dependency>
 				<groupId>org.springframework.ai</groupId>
 				<artifactId>spring-ai-bom</artifactId>
@@ -41,23 +42,35 @@
 		</dependencies>
 	</dependencyManagement>
 	<dependencies>
+		<!-- Provides Spring MVC and REST API support for the application. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- Provides Spring AI integration with Anthropic language models. -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-anthropic</artifactId>
+			<version>2.0.0</version>
+			<exclusions>
+				<exclusion>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-annotations</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
+		<!-- Provides testing support for Spring MVC components and web endpoints. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Provides Spring AI Redis vector store support for storing and searching embeddings. -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-vector-store-redis</artifactId>
 		</dependency>
+		<!-- Provides Spring Data Redis integration for Redis connectivity and data access. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
@@ -68,23 +81,33 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+		<!-- Provides the Jedis Redis client used for Redis connectivity. -->
 		<dependency>
 			<groupId>redis.clients</groupId>
 			<artifactId>jedis</artifactId>
 		</dependency>
+		<!-- Provides Spring AI integration with locally running Ollama models. -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-ollama</artifactId>
 		</dependency>
+		<!-- Generates metadata for custom Spring Boot configuration properties. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-configuration-processor</artifactId>
 			<optional>true</optional>
 		</dependency>
+		<!-- Swagger UI and OpenAPI 3 documentation support. -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.0.1</version>
+		</dependency>
 	</dependencies>
 
 	<build>
 		<plugins>
+			<!-- Builds and packages the Spring Boot application and supports running it with Maven. -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>

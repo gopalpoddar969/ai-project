@@ -5,6 +5,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class RagService {
 
+    /**
+     * Provides the system prompt used for retrieval-augmented generation.
+     *
+     * @return RAG system prompt
+     */
     public String ragSystemPrompt() {
 
         return """
@@ -39,6 +44,11 @@ public class RagService {
             """;
     }
 
+    /**
+     * Provides demo business knowledge used for RAG demonstrations.
+     *
+     * @return demo business knowledge text
+     */
     public String getDemoKnowledge() {
 
         return """

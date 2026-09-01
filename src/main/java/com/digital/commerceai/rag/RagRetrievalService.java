@@ -10,6 +10,9 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
+/**
+ * Retrieves semantically similar documents from the vector store and removes duplicate products.
+ */
 @Service
 public class RagRetrievalService {
 
@@ -19,12 +22,18 @@ public class RagRetrievalService {
         this.vectorStore = vectorStore;
     }
 
+    /**
+     * Performs semantic similarity search and returns unique product documents.
+     *
+     * @param question the user's product question
+     * @return unique semantically relevant product documents
+     */
     public List<Document> retrieve(String question) {
         List<Document> rawResults = vectorStore.similaritySearch(
                 SearchRequest.builder()
                         .query(question)
                         .topK(10)
-                        .similarityThreshold(0.0)
+                        .similarityThreshold(0.5)
                         .build()
         );
         if (rawResults == null || rawResults.isEmpty()) {
@@ -48,6 +57,11 @@ public class RagRetrievalService {
         return results;
     }
 
+    /**
+     * Adds demo business knowledge documents to the vector store.
+     *
+     * @return the demo documents added to the vector store
+     */
     public List<Document> addDemoKnowledge() {
         List<Document> documents = List.of(
                 new Document("""
@@ -84,6 +98,13 @@ public class RagRetrievalService {
     }
 
 
+    /**
+     * Extracts the value of a named field from document text.
+     *
+     * @param text document text containing the field
+     * @param fieldName field name to locate
+     * @return extracted field value, or null when the field is not present
+     */
     private String extractValue(String text, String fieldName) {
         if (text == null || text.isBlank()) {
             return null;

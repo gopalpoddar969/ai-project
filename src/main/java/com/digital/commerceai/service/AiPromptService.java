@@ -5,6 +5,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class AiPromptService {
     
+    /**
+     * Provides the system prompt for general AI questions.
+     *
+     * @return general AI system prompt
+     */
     public String systemPrompt() {
         return """
                 You are an AI assistant for a B2B e-commerce application.
@@ -25,6 +30,11 @@ public class AiPromptService {
                 """;
     }
 
+    /**
+     * Provides the system prompt for product-related AI questions.
+     *
+     * @return product AI system prompt
+     */
     public String productSystemPrompt() {
          return """
             You are a B2B e-commerce product assistant.
