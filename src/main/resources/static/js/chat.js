@@ -3,17 +3,18 @@
 // ============================================================
 //
 // General:
-//   GET /api/ai/ask
+//   GET /api/ai/agent
 //
 // Product:
-//   GET /api/ai/semantic-search
+//   GET /api/ai/product
 //
 // Conversation memory:
 //   A UUID is generated automatically for each browser tab.
 //   It is stored internally in sessionStorage.
 //   It is NOT added to the URL.
 //   It is NOT displayed in the UI.
-//   It is sent only through the X-Conversation-Id header.
+//   It is sent to the backend through the conversationId
+//   request parameter.
 // ============================================================
 
 /**
@@ -22,11 +23,11 @@
 const TABS = [
     {
         name: 'general',
-        endpoint: '/api/ai/ask'
+        endpoint: '/api/ai/agent'
     },
     {
         name: 'product',
-        endpoint: '/api/ai/semantic-search'
+        endpoint: '/api/ai/product'
     }
 ];
 
@@ -215,13 +216,12 @@ function clearError(errorEl) {
 async function askApi(tab, question) {
     const conversationId = getConversationId(tab.name);
 
-    const url = tab.endpoint + '?question=' + encodeURIComponent(question);
+    const url = tab.endpoint
+        + '?question=' + encodeURIComponent(question)
+        + '&conversationId=' + encodeURIComponent(conversationId);
 
     const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'X-Conversation-Id': conversationId
-        }
+        method: 'GET'
     });
 
     if (!response.ok) {
@@ -229,30 +229,9 @@ async function askApi(tab, question) {
     }
 
     /*
-     * General endpoint returns String.
-     *
-     * Semantic-search endpoint returns JSON.
+     * Both the /agent and /product endpoints return
+     * plain String responses from the Spring Boot backend.
      */
-    if (tab.name === 'product') {
-        const data = await response.json();
-
-        /*
-         * The backend returns:
-         *
-         * {
-         *   answer: "...",
-         *   ...
-         * }
-         *
-         * Only display the answer in the chat bubble.
-         */
-        if (data && data.answer) {
-            return data.answer;
-        }
-
-        return JSON.stringify(data);
-    }
-
     return await response.text();
 }
 
@@ -428,11 +407,11 @@ async function clearConversationOnServer(tabName) {
     try {
         const conversationId = getConversationId(tabName);
 
-        await fetch('/api/ai/conversation', {
-            method: 'DELETE',
-            headers: {
-                'X-Conversation-Id': conversationId
-            }
+        const url = '/api/ai/conversation?conversationId='
+            + encodeURIComponent(conversationId);
+
+        await fetch(url, {
+            method: 'DELETE'
         });
 
     } catch (error) {

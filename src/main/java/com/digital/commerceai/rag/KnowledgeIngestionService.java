@@ -17,6 +17,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Loads product knowledge from Solr, converts it into vector store documents,
  * and stores the documents for semantic retrieval.
+ *
+ * <p>Each Commerce product is stored using a deterministic document ID based
+ * on its catentry ID. This prevents the same product from receiving a new
+ * random document ID every time the application starts.</p>
  */
 @Service
 public class KnowledgeIngestionService implements CommandLineRunner {
@@ -27,6 +31,7 @@ public class KnowledgeIngestionService implements CommandLineRunner {
         READY,
         FAILED
     }
+
     private final VectorStore vectorStore;
     private final RestClient restClient;
     private final SolrProperties solrProperties;
@@ -95,21 +100,30 @@ public class KnowledgeIngestionService implements CommandLineRunner {
                                 solrProperties.getPassword()))
                 .retrieve()
                 .body(String.class);
+
         ObjectMapper objectMapper = new ObjectMapper();
-        SolrResponse response = objectMapper.readValue(responseBody, SolrResponse.class);
+
+        SolrResponse response = objectMapper.readValue(
+                responseBody,
+                SolrResponse.class);
+
         if (response == null
                 || response.getResponse() == null
                 || response.getResponse().getDocs() == null
                 || response.getResponse().getDocs().isEmpty()) {
             return;
         }
+
         List<Document> documents = new ArrayList<>();
+
         for (SolrDocument solrDocument : response.getResponse().getDocs()) {
             Document document = convertToVectorDocument(solrDocument);
+
             if (document != null) {
                 documents.add(document);
             }
         }
+
         if (!documents.isEmpty()) {
             vectorStore.add(documents);
         }
@@ -118,15 +132,23 @@ public class KnowledgeIngestionService implements CommandLineRunner {
     /**
      * Converts a Solr product document into a Spring AI vector store document.
      *
+     * <p>The Commerce catentry ID is used as the deterministic document ID.
+     * Product information continues to be stored entirely in the document
+     * text so that retrieval remains based on the text content.</p>
+     *
      * @param solrDocument the Solr product document
      * @return the converted vector store document, or null when the document is invalid
      */
     private Document convertToVectorDocument(SolrDocument solrDocument) {
-        if (solrDocument == null || solrDocument.getCatentryId() == null) {
+        if (solrDocument == null
+                || solrDocument.getCatentryId() == null
+                || solrDocument.getCatentryId().trim().isEmpty()) {
             return null;
         }
+
         String content = buildSemanticContent(solrDocument);
-        return new Document(content);
+        String documentId = "product-" + solrDocument.getCatentryId();
+        return Document.builder().id(documentId).text(content).build();
     }
 
     /**
@@ -137,6 +159,7 @@ public class KnowledgeIngestionService implements CommandLineRunner {
      */
     private String buildSemanticContent(SolrDocument product) {
         StringBuilder content = new StringBuilder();
+
         append(content, "Catentry ID", product.getCatentryId());
         append(content, "Product name", product.getName());
         append(content, "Part number", product.getPartNumber());
@@ -149,6 +172,7 @@ public class KnowledgeIngestionService implements CommandLineRunner {
         append(content, "Quantity measure", product.getQuantityMeasure());
         append(content, "Weight", product.getWeight());
         append(content, "Weight measure", product.getWeightMeasure());
+
         return content.toString();
     }
 

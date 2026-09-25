@@ -2,6 +2,9 @@ package com.digital.commerceai.rag;
 
 import org.springframework.stereotype.Service;
 
+/**
+ * Provides RAG prompts and fallback business knowledge used by the Commerce AI Assistant.
+ */
 @Service
 public class RagService {
 
@@ -45,9 +48,10 @@ public class RagService {
     }
 
     /**
-     * Provides demo business knowledge used for RAG demonstrations.
+     * Provides fallback demo business knowledge used when
+     * vector-store retrieval does not return relevant documents.
      *
-     * @return demo business knowledge text
+     * @return fallback demo business knowledge text
      */
     public String getDemoKnowledge() {
 

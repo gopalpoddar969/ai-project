@@ -753,3 +753,422 @@ Swagger UI:
 OpenAPI specification:
 
     http://localhost:18080/v3/api-docs
+
+
+26. AGENTIC AI - TOOL CALLING
+
+First agentic implementation uses one tool:
+
+ProductSearchTool
+
+The tool is implemented using Spring AI @Tool.
+
+Basic implementation:
+
+@Tool(
+    name = "searchProducts",
+    description = """
+            Search the Commerce product catalog using semantic search.
+            """
+)
+public String searchProducts(
+        @ToolParam(
+                description = "Natural-language description of the product the customer wants to find"
+        )
+        String question) {
+
+    List<Document> documents =
+            ragRetrievalService.retrieve(question);
+
+    if (documents == null || documents.isEmpty()) {
+        return "No relevant products were found for the customer's request.";
+    }
+
+    return ragContextService.buildContext(documents);
+}
+
+
+The tool is then registered with ChatClient:
+
+String answer = chatClient.prompt()
+        .system(aiPromptService.productSystemPrompt())
+        .user("""
+            Previous conversation:
+
+            %s
+
+            Current product question:
+
+            %s
+
+            Use the product search tool when
+            product information is required.
+
+            Answer the current question while
+            maintaining continuity with the
+            previous conversation.
+            """.formatted(history, question))
+        .tools(productSearchTool)
+        .call()
+        .content();
+
+
+The application provides the tool capability.
+
+The LLM decides whether to use the tool.
+
+The LLM does NOT directly access the database,
+vector database, Solr, REST API, or Java method.
+
+The Java/Spring application owns the actual tool execution.
+
+The next evolution is to expose multiple tools to the AI model.
+
+Current tools:
+
+1. searchProducts
+2. checkInventory
+
+AiService registers both tools:
+
+String answer = chatClient.prompt()
+        .system(aiPromptService.productSystemPrompt())
+        .user("""
+            Previous conversation:
+
+            %s
+
+            Current product question:
+
+            %s
+
+            Use the available business tools when
+            reliable product or inventory information
+            is required.
+
+            Answer the current question while
+            maintaining continuity with the
+            previous conversation.
+            """.formatted(history, question))
+        .tools(productSearchTool, inventoryLookupTool)
+        .call()
+        .content();
+
+
+The AI model can now choose:
+
+Product question
+    |
+    +--> searchProducts
+
+
+Inventory question
+    |
+    +--> checkInventory
+
+
+Product + inventory question
+    |
+    +--> searchProducts
+    |
+    +--> checkInventory
+
+
+General question
+    |
+    +--> No tool required
+
+
+The model may use multiple tools when the question
+requires information from multiple business capabilities.
+
+
+27. MCP (MODEL CONTEXT PROTOCOL)
+
+After introducing Spring AI Tool Calling, the next concept
+implemented was MCP (Model Context Protocol).
+
+MCP provides a standardized protocol for exposing tools and
+business capabilities so that MCP-compatible clients can
+discover and invoke them.
+
+MCP does NOT itself make an application agentic.
+
+Agentic behavior comes from the AI model deciding when and
+which tools to use.
+
+MCP provides a standardized way for external AI applications
+or clients to discover and invoke those capabilities.
+
+
+28. MCP SERVER IMPLEMENTATION
+
+The existing Spring AI tools were exposed through an MCP
+Server without duplicating the existing business logic.
+
+Existing tools:
+
+1. ProductSearchTool
+   Tool name: searchProducts
+
+2. InventoryLookupTool
+   Tool name: checkInventory
+
+
+The existing @Tool methods were reused directly.
+
+No separate duplicate CommerceMcpTools class was required.
+
+
+29. MCP SERVER CONFIGURATION
+
+Created:
+
+McpServerConfig.java
+
+The configuration creates a Spring AI
+ToolCallbackProvider using:
+
+MethodToolCallbackProvider.builder()
+    .toolObjects(
+        productSearchTool,
+        inventoryLookupTool
+    )
+    .build();
+
+
+This converts the existing @Tool methods into
+ToolCallback objects that can be exposed by the MCP server.
+
+
+This approach avoids duplicating business logic.
+
+The same ProductSearchTool and InventoryLookupTool can
+therefore participate in both:
+
+1. Direct Spring AI Tool Calling
+2. MCP-based tool access
+
+
+30. MCP SERVER DEPENDENCY
+
+Added the Spring AI MCP Server WebMVC starter:
+
+spring-ai-starter-mcp-server-webmvc
+
+Spring AI BOM version used:
+
+2.0.1
+
+
+31. MCP SERVER CONFIGURATION
+
+Configured Streamable HTTP MCP transport:
+
+spring.ai.mcp.server.protocol=STREAMABLE
+
+MCP server name:
+
+spring.ai.mcp.server.name=commerce-ai-assistant
+
+MCP server version:
+
+spring.ai.mcp.server.version=1.0.0
+
+
+The MCP endpoint exposed by the application is:
+
+http://localhost:18080/mcp
+
+
+The MCP server therefore runs inside the existing
+commerce-ai-assistant Spring Boot application.
+
+A separate Spring Boot MCP server application was NOT
+required for this hands-on implementation.
+
+
+32. MCP CLIENT IMPLEMENTATION / VALIDATION
+
+For learning and validation purposes, the MCP endpoint was
+tested manually using curl.exe.
+
+The same Spring Boot application acts as the MCP Server.
+
+curl.exe was used as the MCP Client for validation.
+
+This demonstrates that an MCP client can communicate with
+the MCP server through the standard MCP protocol.
+
+
+33. MCP INITIALIZATION
+
+The MCP client first sends an initialize request.
+
+The server responds with:
+
+- negotiated protocol version
+- server capabilities
+- server name
+- server version
+- MCP session ID
+
+
+Successful validation was performed using:
+
+MCP Protocol Version:
+
+2025-06-18
+
+
+The server returned HTTP 200 and generated an MCP session ID.
+
+Example:
+
+Mcp-Session-Id:
+c1696175-af92-43b3-8f20-3c617983b037
+
+
+The successful initialize response confirmed that the
+Streamable HTTP MCP server was active and able to establish
+an MCP session.
+
+
+34. MCP TOOL DISCOVERY
+
+After initialization, the MCP client can request:
+
+tools/list
+
+
+This allows the MCP client to discover the tools exposed by
+the MCP server.
+
+The expected tools exposed by this application are:
+
+1. searchProducts
+2. checkInventory
+
+
+This demonstrates an important MCP capability:
+
+The client does not need the Java implementation details of
+the tools.
+
+It can discover the available tools and their schemas from
+the MCP server.
+
+
+35. MCP TOOL EXECUTION
+
+After discovering the tools, the MCP client can invoke a
+specific tool using:
+
+tools/call
+
+
+Example:
+
+searchProducts
+
+and:
+
+checkInventory
+
+
+The MCP server receives the request and invokes the existing
+Spring AI ToolCallback mapped to the corresponding Java
+@Tool method.
+
+No duplicate implementation of product search or inventory
+logic is required.
+
+
+36. MCP VALIDATION FLOW
+
+The complete MCP validation flow implemented during Day 26:
+
+1. Start Spring Boot application
+
+2. MCP Server starts automatically
+
+3. MCP endpoint becomes available:
+
+   /mcp
+
+4. MCP client sends:
+
+   initialize
+
+5. MCP server responds with:
+
+   protocolVersion
+   capabilities
+   serverInfo
+   Mcp-Session-Id
+
+6. MCP client sends:
+
+   notifications/initialized
+
+7. MCP client sends:
+
+   tools/list
+
+8. MCP server returns:
+
+   searchProducts
+   checkInventory
+
+9. MCP client sends:
+
+   tools/call
+
+10. MCP server invokes the corresponding existing
+    Java @Tool method
+
+11. Tool result is returned to the MCP client
+
+
+This completed the end-to-end MCP Server validation.
+
+
+37. MCP CLIENT VS MCP SERVER - IMPORTANT CONCEPT
+
+MCP Server:
+
+Responsible for exposing tools/resources/prompts through
+the MCP protocol.
+
+In this project:
+
+commerce-ai-assistant
+
+acts as the MCP Server.
+
+
+MCP Client:
+
+Responsible for connecting to an MCP server and discovering
+and invoking the capabilities exposed by that server.
+
+For the Day 26 manual validation:
+
+curl.exe
+
+was used as the MCP Client.
+
+In a real enterprise architecture, the MCP Client could
+instead be another AI application, desktop AI application,
+agent framework, IDE, or another MCP-compatible system.
+
+
+38. DIRECT SPRING AI TOOL CALLING VS MCP
+
+The key difference is the communication boundary.
+
+Direct Tool Calling can remain inside the same application
+and JVM.
+
+MCP introduces a standardized protocol boundary between the
+client and the server.
